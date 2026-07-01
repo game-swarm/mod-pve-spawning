@@ -1,37 +1,10 @@
 use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
+use swarm_engine::components::{
+    BodyPart, BodyPartRegistry, Drone, PlayerId, Position, Resource, RoomId,
+};
 
-pub type PlayerId = u32;
 pub const NPC_OWNER: PlayerId = 0;
-
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct RoomId(pub u32);
-
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Position {
-    pub x: i32,
-    pub y: i32,
-    pub room: RoomId,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BodyPart {
-    Attack,
-    Move,
-}
-
-#[derive(Component, Debug, Clone)]
-pub struct Drone {
-    pub owner: PlayerId,
-    pub body: Vec<BodyPart>,
-    pub hits: u32,
-    pub hits_max: u32,
-}
-
-#[derive(Component, Debug, Clone)]
-pub struct ResourceDrop {
-    pub amounts: BTreeMap<String, u32>,
-}
 
 #[derive(Component, Debug, Clone)]
 pub struct RoomConfig {
@@ -111,7 +84,10 @@ impl Plugin for PveSpawningModPlugin {
         app.init_resource::<WorldConfig>()
             .init_resource::<PveSpawningConfig>()
             .init_resource::<PveSpawnClock>()
-            .add_systems(Update, (pve_spawn_system, npc_ai_system, pve_drop_system).chain());
+            .add_systems(
+                Update,
+                (pve_spawn_system, npc_ai_system, pve_drop_system).chain(),
+            );
     }
 }
 
@@ -132,7 +108,9 @@ pub fn pve_spawn_system(
         *counts.entry(pos.room).or_default() += 1;
     }
     for room in &rooms {
-        if !room.pve_enabled || counts.get(&room.room).copied().unwrap_or(0) >= config.max_npcs_per_room {
+        if !room.pve_enabled
+            || counts.get(&room.room).copied().unwrap_or(0) >= config.max_npcs_per_room
+        {
             continue;
         }
         let kind = if clock.tick % (config.spawn_interval * 10) == 0 {
@@ -143,12 +121,10 @@ pub fn pve_spawn_system(
             NpcKind::Neutral
         };
         commands.spawn((
-            Drone {
-                owner: NPC_OWNER,
-                body: config.npc_drone_body.clone(),
-                hits: if kind == NpcKind::Elite { 500 } else { 100 },
-                hits_max: if kind == NpcKind::Elite { 500 } else { 100 },
-            },
+            npc_drone(
+                &config.npc_drone_body,
+                if kind == NpcKind::Elite { 500 } else { 100 },
+            ),
             room.spawn_origin,
             NpcAI {
                 kind,
@@ -161,7 +137,10 @@ pub fn pve_spawn_system(
     }
 }
 
-pub fn npc_ai_system(mut npcs: Query<(&mut NpcAI, &mut Position)>, drones: Query<(Entity, &Drone, &Position)>) {
+pub fn npc_ai_system(
+    mut npcs: Query<(&mut NpcAI, &mut Position)>,
+    drones: Query<(Entity, &Drone, &Position)>,
+) {
     let player_positions: Vec<_> = drones
         .iter()
         .filter(|(_, drone, _)| drone.owner != NPC_OWNER)
@@ -171,7 +150,9 @@ pub fn npc_ai_system(mut npcs: Query<(&mut NpcAI, &mut Position)>, drones: Query
         let target = player_positions
             .iter()
             .filter(|(_, target_pos)| target_pos.room == pos.room)
-            .min_by_key(|(_, target_pos)| pos.x.abs_diff(target_pos.x) + pos.y.abs_diff(target_pos.y))
+            .min_by_key(|(_, target_pos)| {
+                pos.x.abs_diff(target_pos.x) + pos.y.abs_diff(target_pos.y)
+            })
             .copied();
         match (ai.state, target) {
             (_, Some((entity, target_pos))) => {
@@ -180,7 +161,9 @@ pub fn npc_ai_system(mut npcs: Query<(&mut NpcAI, &mut Position)>, drones: Query
                 step_toward(&mut pos, target_pos);
             }
             (NpcState::Chase, None) => ai.state = NpcState::Return,
-            (NpcState::Return, None) if pos.x != ai.home.x || pos.y != ai.home.y => step_toward(&mut pos, ai.home),
+            (NpcState::Return, None) if pos.x != ai.home.x || pos.y != ai.home.y => {
+                step_toward(&mut pos, ai.home)
+            }
             (NpcState::Return, None) => ai.state = NpcState::Guard,
             (NpcState::Guard, None) => ai.state = NpcState::Patrol,
             (NpcState::Patrol, None) => pos.x = pos.x.saturating_add(1),
@@ -195,10 +178,23 @@ pub fn pve_drop_system(
     let mut spawned = BTreeSet::new();
     for (entity, ai, position, drone) in &dead_npcs {
         if drone.owner == NPC_OWNER && drone.hits == 0 && spawned.insert(entity) {
-            commands.spawn((ResourceDrop { amounts: ai.drop_table.clone() }, *position));
+            commands.spawn((
+                Resource {
+                    amounts: ai.drop_table.clone().into_iter().collect(),
+                },
+                *position,
+            ));
             commands.entity(entity).despawn();
         }
     }
+}
+
+fn npc_drone(body: &[BodyPart], hits: u32) -> Drone {
+    let registry = BodyPartRegistry::default();
+    let mut drone = Drone::new(NPC_OWNER, body.to_vec(), &registry);
+    drone.hits = hits;
+    drone.hits_max = hits;
+    drone
 }
 
 fn step_toward(pos: &mut Position, target: Position) {
