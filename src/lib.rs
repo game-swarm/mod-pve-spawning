@@ -100,7 +100,8 @@ pub fn pve_spawn_system(
     npcs: Query<(&NpcAI, &Position)>,
 ) {
     clock.tick = clock.tick.saturating_add(1);
-    if clock.tick % config.spawn_interval != 0 || !world.pve_only && world.pvp_enabled {
+    let spawn_interval = config.spawn_interval.max(1);
+    if !clock.tick.is_multiple_of(spawn_interval) || !world.pve_only && world.pvp_enabled {
         return;
     }
     let mut counts: BTreeMap<RoomId, u32> = BTreeMap::new();
@@ -113,9 +114,11 @@ pub fn pve_spawn_system(
         {
             continue;
         }
-        let kind = if clock.tick % (config.spawn_interval * 10) == 0 {
+        let elite_interval = spawn_interval.saturating_mul(10).max(1);
+        let resource_interval = spawn_interval.saturating_mul(3).max(1);
+        let kind = if clock.tick.is_multiple_of(elite_interval) {
             NpcKind::Elite
-        } else if clock.tick % (config.spawn_interval * 3) == 0 {
+        } else if clock.tick.is_multiple_of(resource_interval) {
             NpcKind::ResourceWave
         } else {
             NpcKind::Neutral
@@ -200,4 +203,41 @@ fn npc_drone(body: &[BodyPart], hits: u32) -> Drone {
 fn step_toward(pos: &mut Position, target: Position) {
     pos.x += (target.x - pos.x).signum();
     pos.y += (target.y - pos.y).signum();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use swarm_engine::components::RoomId;
+
+    #[test]
+    fn default_spawning_config_has_npc_body_and_drop() {
+        let config = PveSpawningConfig::default();
+
+        assert_eq!(config.spawn_interval, 300);
+        assert_eq!(config.max_npcs_per_room, 50);
+        assert_eq!(config.npc_drone_body.len(), 3);
+        assert_eq!(config.npc_drop_table.get("Energy"), Some(&50));
+    }
+
+    #[test]
+    fn step_toward_moves_one_tile_per_axis() {
+        let mut pos = Position {
+            x: 0,
+            y: 4,
+            room: RoomId(0),
+        };
+
+        step_toward(
+            &mut pos,
+            Position {
+                x: 3,
+                y: 2,
+                room: RoomId(0),
+            },
+        );
+
+        assert_eq!(pos.x, 1);
+        assert_eq!(pos.y, 3);
+    }
 }
