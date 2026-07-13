@@ -31,3 +31,12 @@ npc_drop_table = { type = "string", default = "{Energy: 50}" }
 
 - 写入: `Drone`（NPC 实体）, `NpcAI`（NPC 行为组件）
 - 读取: `Position`, `RoomConfig`, `WorldConfig`
+
+## Standalone Development
+
+This repository is consumable as an independent Cargo crate. It pins `swarm-engine` from `https://github.com/game-swarm/engine.git` at rev `4f9776302d0784e78bc5f04c7e38e28cc6d4c633`; no sibling checkout layout is required.
+
+```sh
+cargo check
+cargo test
+```
