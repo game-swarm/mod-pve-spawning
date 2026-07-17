@@ -5,12 +5,12 @@ description = "PvE NPC spawning system — spawn rates, difficulty zones, and NP
 author = "Swarm Team"
 
 [dependencies]
-empire-upkeep = ">=0.1.0"
 
 [config]
-spawn_rate = { type = "int", default = 5, description = "Base spawn rate (entities per tick per zone)" }
-npc_types = { type = "string", default = "basic", description = "Comma-separated list of NPC types to spawn" }
-difficulty_zones = { type = "string", default = "", description = "JSON map of room:difficulty for zone-based scaling" }
+spawn_interval = { type = "u32", default = 300, description = "Ticks between NPC spawn attempts" }
+max_npcs_per_room = { type = "u32", default = 50, description = "Maximum NPCs allowed in a room" }
+npc_drone_body = { type = "array<BodyPart>", default = ["Attack", "Move", "Move"], description = "Body parts for spawned NPC drones" }
+npc_drop_table = { type = "map<Resource,u32>", default = { Energy = 50 }, description = "Resource drops produced by NPCs" }
 
 [compatibility]
 engine_abi_min = "1.0"

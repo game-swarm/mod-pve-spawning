@@ -18,13 +18,15 @@ PvE 敌人生成模组。管理中立 NPC 生成、资源潮和公共事件。
 
 ## 配置
 
+以下配置由 Engine 从 `mods.lock` 严格解码并注入 `PveSpawningConfig`；NPC body 和掉落表保持 typed array/map，不经过字符串解析。
+
 mod.toml:
 ```toml
 [config]
-spawn_interval = { type = "u32", default = 300, min = 10 }
+spawn_interval = { type = "u32", default = 300 }
 max_npcs_per_room = { type = "u32", default = 50 }
-npc_drone_body = { type = "string", default = "[ATTACK, MOVE, MOVE]" }
-npc_drop_table = { type = "string", default = "{Energy: 50}" }
+npc_drone_body = { type = "array<BodyPart>", default = ["Attack", "Move", "Move"] }
+npc_drop_table = { type = "map<Resource,u32>", default = { Energy = 50 } }
 ```
 
 ## 事件
