@@ -36,7 +36,7 @@ npc_drop_table = { type = "map<Resource,u32>", default = { Energy = 50 } }
 
 ## Standalone Development
 
-This repository is consumable as an independent Cargo crate. It pins `swarm-engine` from `https://github.com/game-swarm/engine.git` at rev `fc1286401cdea0e6e4a4e3aef931e50b35dcc6e0`; no sibling checkout layout is required.
+This repository is consumable as an independent Cargo crate. Its `swarm-engine` dependency is pinned in `Cargo.toml`, so no sibling checkout layout is required.
 
 ```sh
 cargo check
