@@ -36,16 +36,13 @@ npc_drop_table = { type = "map<Resource,u32>", default = { Energy = 50 } }
 
 ## Standalone Development
 
-This crate depends on `swarm-engine-api` and `swarm-engine-plugin-sdk` version `0.1.0`. Until those crates are published to a registry, place the API repository beside `mods/` so the paths in `Cargo.toml` resolve:
+This crate pins `swarm-engine-api` and `swarm-engine-plugin-sdk` to version `0.1.0` at the `v0.1.0` engine API Git tag. Cargo fetches both crates directly from that release.
 
 ```sh
-mkdir -p swarm/mods
-git clone <this-mod-repository-url> swarm/mods/pve-spawning
-# Fetch the reviewed API/SDK v0.1.0 source:
-git clone --branch v0.1.0 https://github.com/game-swarm/engine-api swarm/engine-api
-cd swarm/mods/pve-spawning
+git clone <this-mod-repository-url> pve-spawning
+cd pve-spawning
 cargo check
 cargo test
 ```
 
-To adopt a later API/SDK release, update both exact versions in `Cargo.toml` and the immutable API commit in `.github/workflows/ci.yml` together.
+To adopt a later API/SDK release, update both exact versions and both Git tags in `Cargo.toml` together.
