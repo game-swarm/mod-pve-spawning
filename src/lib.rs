@@ -1,8 +1,11 @@
 use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
-use swarm_engine::components::{
-    BodyPart, BodyPartRegistry, Drone, PlayerId, Position, Resource, RoomId,
+use swarm_engine_api::prelude::{
+    API_VERSION, BodyPart, ConfigFieldDescriptor, ConfigValidator, ConfigValueType,
+    DESCRIPTOR_SCHEMA_VERSION, PlayerId, PluginDescriptor, RoomId, SystemDescriptor, TickPhase,
 };
+use swarm_engine_plugin_sdk::components::{BodyPartRegistry, Drone, Position, Resource};
+use swarm_engine_plugin_sdk::traits::SwarmPlugin;
 
 pub const NPC_OWNER: PlayerId = 0;
 
@@ -88,6 +91,105 @@ impl Plugin for PveSpawningModPlugin {
                 Update,
                 (pve_spawn_system, npc_ai_system, pve_drop_system).chain(),
             );
+    }
+}
+
+impl SwarmPlugin for PveSpawningModPlugin {
+    fn descriptor() -> PluginDescriptor {
+        PluginDescriptor {
+            id: "pve-spawning".to_string(),
+            version: "0.1.0".to_string(),
+            api_version: API_VERSION.to_string(),
+            dependencies: Vec::new(),
+            config: vec![
+                ConfigFieldDescriptor {
+                    key: "spawn_interval".to_string(),
+                    value_type: ConfigValueType::U32,
+                    default: 300_u32.into(),
+                    required: false,
+                    validator: Some(ConfigValidator::Positive),
+                },
+                ConfigFieldDescriptor {
+                    key: "max_npcs_per_room".to_string(),
+                    value_type: ConfigValueType::U32,
+                    default: 50_u32.into(),
+                    required: false,
+                    validator: Some(ConfigValidator::Positive),
+                },
+                ConfigFieldDescriptor {
+                    key: "npc_drone_body".to_string(),
+                    value_type: ConfigValueType::Array {
+                        item_type: "BodyPart".to_string(),
+                    },
+                    default: serde_json::json!(["Attack", "Move", "Move"]),
+                    required: false,
+                    validator: Some(ConfigValidator::NonEmptyArray),
+                },
+                ConfigFieldDescriptor {
+                    key: "npc_drop_table".to_string(),
+                    value_type: ConfigValueType::Map {
+                        key_type: "Resource".to_string(),
+                        value_type: "U32".to_string(),
+                    },
+                    default: serde_json::json!({ "Energy": 50 }),
+                    required: false,
+                    validator: None,
+                },
+            ],
+            systems: vec![
+                SystemDescriptor {
+                    system_id: "pve-spawning.spawn".to_string(),
+                    version: "0.1.0".to_string(),
+                    phase: TickPhase::Update,
+                    order: 0,
+                    reads: vec![
+                        "PveSpawningConfig".to_string(),
+                        "WorldConfig".to_string(),
+                        "RoomConfig".to_string(),
+                        "NpcAI".to_string(),
+                        "Position".to_string(),
+                    ],
+                    writes: vec![
+                        "PveSpawnClock".to_string(),
+                        "EntityLifecycle".to_string(),
+                        "Drone".to_string(),
+                        "Position".to_string(),
+                        "NpcAI".to_string(),
+                    ],
+                    produces_buffers: Vec::new(),
+                    consumes_buffers: Vec::new(),
+                    deterministic_iteration: vec!["RoomId".to_string()],
+                },
+                SystemDescriptor {
+                    system_id: "pve-spawning.npc-ai".to_string(),
+                    version: "0.1.0".to_string(),
+                    phase: TickPhase::Update,
+                    order: 1,
+                    reads: vec!["Drone".to_string()],
+                    writes: vec!["NpcAI".to_string(), "Position".to_string()],
+                    produces_buffers: Vec::new(),
+                    consumes_buffers: Vec::new(),
+                    deterministic_iteration: vec!["Entity".to_string()],
+                },
+                SystemDescriptor {
+                    system_id: "pve-spawning.drop".to_string(),
+                    version: "0.1.0".to_string(),
+                    phase: TickPhase::Update,
+                    order: 2,
+                    reads: vec![
+                        "NpcAI".to_string(),
+                        "Drone".to_string(),
+                        "Position".to_string(),
+                    ],
+                    writes: vec!["EntityLifecycle".to_string(), "Resource".to_string()],
+                    produces_buffers: Vec::new(),
+                    consumes_buffers: Vec::new(),
+                    deterministic_iteration: vec!["Entity".to_string()],
+                },
+            ],
+            actions: Vec::new(),
+            descriptor_schema_version: DESCRIPTOR_SCHEMA_VERSION.to_string(),
+        }
     }
 }
 
@@ -208,7 +310,7 @@ fn step_toward(pos: &mut Position, target: Position) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use swarm_engine::components::RoomId;
+    use swarm_engine_api::ids::RoomId;
 
     #[test]
     fn default_spawning_config_has_npc_body_and_drop() {
@@ -239,5 +341,40 @@ mod tests {
 
         assert_eq!(pos.x, 1);
         assert_eq!(pos.y, 3);
+    }
+
+    #[test]
+    fn descriptor_is_valid_and_identifies_pve_spawning() {
+        let descriptor = PveSpawningModPlugin::descriptor();
+        swarm_engine_api::validation::assert_valid_descriptor(&descriptor);
+        assert_eq!(descriptor.id, "pve-spawning");
+        assert!(descriptor.dependencies.is_empty());
+        assert_eq!(descriptor.config.len(), 4);
+        assert_eq!(descriptor.systems.len(), 3);
+        assert_eq!(
+            descriptor
+                .config
+                .iter()
+                .map(|field| field.key.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "spawn_interval",
+                "max_npcs_per_room",
+                "npc_drone_body",
+                "npc_drop_table"
+            ]
+        );
+        assert_eq!(
+            descriptor
+                .systems
+                .iter()
+                .map(|system| system.system_id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "pve-spawning.spawn",
+                "pve-spawning.npc-ai",
+                "pve-spawning.drop"
+            ]
+        );
     }
 }
